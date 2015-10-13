@@ -19,6 +19,11 @@ PARAMS = [
         {'name': 'Show', 'type': 'bool', 'value': True},
         {'name': 'Line Color', 'type': 'str', 'value': 'aaaa'},
     ]},
+    {'name': 'Lambda range', 'type': 'group', 'children': [
+        {'name': 'Min', 'type': 'int', 'value': 0},
+        {'name': 'Max', 'type': 'int', 'value': 100},
+        {'name': 'Color', 'type': 'str', 'value': '3333'},
+    ]},
     {'name': 'Median filter', 'type': 'group', 'children': [
         {'name': 'Show', 'type': 'bool', 'value': False},
         {'name': 'Kernel Size', 'type': 'int', 'value': 5},
@@ -55,6 +60,8 @@ class MuseApp(object):
         self.tree.setParameters(self.params, showTop=False)
         self.tree.setWindowTitle('pyqtgraph example: Parameter Tree')
 
+        self.params.param('Lambda range').sigTreeStateChanged.connect(
+            self.show_image)
         for p in ('Sky', 'Median filter'):
             self.params.param(p).sigTreeStateChanged.connect(
                 self.update_spec_plot)
@@ -90,7 +97,12 @@ class MuseApp(object):
         self.specplot = win.addPlot(title='Spectrum', colspan=2)
         self.zoomplot = None
 
-        self.win.resize(800, 800)
+        self.lbdareg = region = pg.LinearRegionItem(movable=False)
+        self.specplot.addItem(region)
+
+        region.setZValue(10)
+
+        self.win.resize(1000, 800)
         self.win.show()
 
     def add_zoom_window(self):
@@ -123,12 +135,19 @@ class MuseApp(object):
         print('Loading cube ...', end='')
         self.cube = Cube(filename)
         print('OK')
+        self.show_image()
+
+    def show_image(self):
         print('Creating image ...', end='')
         self.img = self.cube[:100, :, :].mean(axis=0)
         print('OK')
         self.img_item.setImage(self.img.data.data)
         # self.hist.setLevels(self.img.data.min(), self.img.data.max())
         self.hist.setLevels(*plt_zscale.zscale(self.img.data.filled(0)))
+
+        self.lbdareg.setBrush(self.params['Lambda range', 'Color'])
+        self.lbdareg.setRegion([self.params['Lambda range', 'Min'],
+                                self.params['Lambda range', 'Max']])
 
         # zoom to fit imageo
         self.img_plot.autoRange()
