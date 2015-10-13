@@ -3,11 +3,16 @@
 from __future__ import absolute_import, print_function
 
 import numpy as np
+import os
 import pyqtgraph as pg
+import sys
 from mpdaf.obj import Cube, Spectrum, plt_zscale
 from pyqtgraph.Qt import QtCore, QtGui
 from pyqtgraph.parametertree import Parameter, ParameterTree
 
+
+SKYREF = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'udf',
+                      'data', 'sky-ref-spectra.fits')
 
 PARAMS = [
     {'name': 'Sky', 'type': 'group', 'children': [
@@ -27,7 +32,7 @@ class MuseApp(object):
     def __init__(self):
         self.img = None
         self.cube = None
-        self.sky = Spectrum('sky-ref-spectra.fits')
+        self.sky = Spectrum(SKYREF)
         self.sky.data /= self.sky.data.max()
 
         pg.mkQApp()
@@ -90,7 +95,8 @@ class MuseApp(object):
 
     def add_zoom_window(self):
         self.win_inner.nextRow()
-        self.zoomplot = self.win_inner.addPlot(title='Zoomed Spectrum', colspan=2)
+        self.zoomplot = self.win_inner.addPlot(title='Zoomed Spectrum',
+                                               colspan=2)
         self.zoomreg = region = pg.LinearRegionItem()
         region.setZValue(10)
         # Add the LinearRegionItem to the ViewBox, but tell the ViewBox to
@@ -188,11 +194,16 @@ class MuseApp(object):
                 self.update_spec_with_region()
 
 
-if __name__ == '__main__':
-    import sys
+def main():
     # Start Qt event loop unless running in interactive mode or using pyside.
     if sys.flags.interactive != 1 or not hasattr(QtCore, 'PYQT_VERSION'):
         app = MuseApp()
         # pg.dbg()
-        app.load_cube('/home/simon/muse/UDF/0.21/DATACUBE-ZAP_UDF-10.fits')
+        if len(sys.argv) != 2:
+            print('No cube filename provided ?')
+        app.load_cube(sys.argv[1])
         QtGui.QApplication.instance().exec_()
+
+
+if __name__ == '__main__':
+    main()
