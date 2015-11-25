@@ -19,10 +19,12 @@ PARAMS = [
         {'name': 'Show', 'type': 'bool', 'value': True},
         {'name': 'Line Color', 'type': 'str', 'value': 'aaaa'},
     ]},
-    {'name': 'Lambda range', 'type': 'group', 'children': [
-        {'name': 'Min', 'type': 'int', 'value': 0},
-        {'name': 'Max', 'type': 'int', 'value': 100},
-        {'name': 'Color', 'type': 'str', 'value': '3333'},
+    {'name': 'Spectrum', 'type': 'group', 'children': [
+        {'name': 'Line color', 'type': 'str', 'value': 'fffa'},
+        {'name': 'Lambda Min', 'type': 'int', 'value': 0},
+        {'name': 'Lambda Max', 'type': 'int', 'value': 100},
+        {'name': 'Selection color', 'type': 'str', 'value': '3333'},
+        {'name': 'Show Zoom', 'type': 'bool', 'value': False},
     ]},
     {'name': 'Median filter', 'type': 'group', 'children': [
         {'name': 'Show', 'type': 'bool', 'value': False},
@@ -37,6 +39,7 @@ class MuseApp(object):
     def __init__(self):
         self.img = None
         self.cube = None
+        self.spec = None
         self.sky = Spectrum(SKYREF)
         self.sky.data /= self.sky.data.max()
 
@@ -60,11 +63,13 @@ class MuseApp(object):
         self.tree.setParameters(self.params, showTop=False)
         self.tree.setWindowTitle('pyqtgraph example: Parameter Tree')
 
-        self.params.param('Lambda range').sigTreeStateChanged.connect(
-            self.show_image)
-        for p in ('Sky', 'Median filter'):
-            self.params.param(p).sigTreeStateChanged.connect(
-                self.update_spec_plot)
+        self.connect(('Median filter', ), self.update_spec_plot)
+        self.connect(('Sky', ), self.update_spec_plot)
+        self.connect(('Spectrum', 'Lambda Max'), self.show_image)
+        self.connect(('Spectrum', 'Lambda Min'), self.show_image)
+        self.connect(('Spectrum', 'Line color'), self.update_spec_plot)
+        self.connect(('Spectrum', 'Selection color'), self.update_spec_plot)
+        self.connect(('Spectrum', 'Show Zoom'), self.add_zoom_window)
 
         self.win_inner = win = pg.GraphicsLayoutWidget()
         self.splitter2 = QtGui.QSplitter()
@@ -96,6 +101,7 @@ class MuseApp(object):
         win.nextRow()
         self.specplot = win.addPlot(title='Spectrum', colspan=2)
         self.zoomplot = None
+        self.zoomplot_visible = False
 
         self.lbdareg = region = pg.LinearRegionItem(movable=False)
         self.specplot.addItem(region)
@@ -105,53 +111,61 @@ class MuseApp(object):
         self.win.resize(1000, 800)
         self.win.show()
 
+    def connect(self, names, func):
+        self.params.param(*names).sigTreeStateChanged.connect(func)
+
     def add_zoom_window(self):
+        if self.zoomplot_visible:
+            return
+        else:
+            self.zoomplot_visible = True
+
         self.win_inner.nextRow()
         self.zoomplot = self.win_inner.addPlot(title='Zoomed Spectrum',
                                                colspan=2)
         self.zoomreg = region = pg.LinearRegionItem()
         region.setZValue(10)
-        # Add the LinearRegionItem to the ViewBox, but tell the ViewBox to
-        # exclude this item when doing auto-range calculations.
         # self.specplot.addItem(self.zoomreg, ignoreBounds=True)
         self.zoomplot.setAutoVisible(y=True)
 
-        def update_spec_with_region():
-            region.setZValue(10)
-            minX, maxX = region.getRegion()
-            print('update_spec_with_region')
-            self.zoomplot.setXRange(minX, maxX, padding=0)
-
-        def update_region():
-            print('update_region')
+        def update_region_from_zoom():
             region.setRegion(self.zoomplot.getViewBox().viewRange()[0])
 
-        region.sigRegionChanged.connect(update_spec_with_region)
-        self.zoomplot.sigRangeChanged.connect(update_region)
+        region.sigRegionChanged.connect(self.update_zoom_spec_from_region)
+        self.zoomplot.sigRangeChanged.connect(update_region_from_zoom)
         region.setRegion([1000, 1200])
+
+    def update_zoom_spec_from_region(self):
+        self.zoomplot.plot(self.spec.data.data, clear=True,
+                           pen=self.params['Spectrum', 'Line color'])
+        # Add the LinearRegionItem to the ViewBox, but tell the ViewBox to
+        # exclude this item when doing auto-range calculations.
+        self.specplot.addItem(self.zoomreg, ignoreBounds=True)
+        self.zoomreg.setZValue(10)
+        self.zoomplot.setXRange(*self.zoomreg.getRegion(), padding=0)
 
     def load_cube(self, filename):
         # Generate image data
-        print('Loading cube ...', end='')
+        print('Loading cube {} ... '.format(filename), end='')
         self.cube = Cube(filename)
         print('OK')
         self.show_image()
 
-    def show_image(self):
-        print('Creating image ...', end='')
-        self.img = self.cube[:100, :, :].mean(axis=0)
-        print('OK')
-        self.img_item.setImage(self.img.data.data)
-        # self.hist.setLevels(self.img.data.min(), self.img.data.max())
-        self.hist.setLevels(*plt_zscale.zscale(self.img.data.filled(0)))
-
-        self.lbdareg.setBrush(self.params['Lambda range', 'Color'])
-        self.lbdareg.setRegion([self.params['Lambda range', 'Min'],
-                                self.params['Lambda range', 'Max']])
-
         # zoom to fit imageo
         self.img_plot.autoRange()
         self.update_spec_plot()
+
+    def show_image(self):
+        print('Creating image ... ', end='')
+        self.img = self.cube[:100, :, :].mean(axis=0)
+        print('OK')
+        self.img_item.setImage(self.img.data.data.T)
+        # self.hist.setLevels(self.img.data.min(), self.img.data.max())
+        self.hist.setLevels(*plt_zscale.zscale(self.img.data.filled(0)))
+
+        self.lbdareg.setBrush(self.params['Spectrum', 'Selection color'])
+        self.lbdareg.setRegion([self.params['Spectrum', 'Lambda Min'],
+                                self.params['Spectrum', 'Lambda Max']])
 
     def add_roi(self, position=(150, 100), size=(20, 20)):
         # Custom ROI for selecting an image region
@@ -179,38 +193,35 @@ class MuseApp(object):
 
     def update_spec_plot(self):
         """Callbacks for handling user interaction"""
-        print('update_spec_plot')
-        if self.img is not None:
-            p = self.params
-            pos = np.array(self.roi.pos(), dtype=int)
-            size = np.array(self.roi.size(), dtype=int)
-            imin = np.clip(pos - size, 0, self.cube.shape[1])
-            imax = np.clip(pos + size, 0, self.cube.shape[2])
-            print('Extract mean spectrum for {}'.format(zip(imin, imax)))
-            data = self.cube[:, imin[0]:imax[0], imin[1]:imax[1]]
-            spec = data.mean(axis=(1, 2))
-            self.specplot.clearPlots()
+        if self.img is None:
+            return
 
-            if p['Sky', 'Show']:
-                sp = self.sky.data.data * (2*spec.data.max()) + spec.data.min()
-                print('Sky color:', p['Sky', 'Line Color'])
-                self.specplot.plot(sp, pen=p['Sky', 'Line Color'])
-                # (200, 200, 200, 100)
+        p = self.params
+        pos = np.array(self.roi.pos(), dtype=int)
+        size = np.array(self.roi.size(), dtype=int)
+        imin = np.clip(pos - size, 0, self.cube.shape[1])
+        imax = np.clip(pos + size, 0, self.cube.shape[2])
+        print('Extract mean spectrum for {}'.format(zip(imin, imax)))
+        data = self.cube[:, imin[0]:imax[0], imin[1]:imax[1]]
+        self.spec = spec = data.mean(axis=(1, 2))
+        self.specplot.clearPlots()
 
-            self.specplot.plot(spec.data.data, pen=(255, 255, 255, 200))
+        if p['Sky', 'Show']:
+            sp = self.sky.data.data * (2*spec.data.max()) + spec.data.min()
+            self.specplot.plot(sp, pen=p['Sky', 'Line Color'])
 
-            if p['Median filter', 'Show']:
-                sp = spec.median_filter(p['Median filter', 'Kernel Size'])
-                self.specplot.plot(sp.data.data, pen={
-                    'color': p['Median filter', 'Line Color'],
-                    'width': p['Median filter', 'Line Size']
-                })
+        self.specplot.plot(spec.data.data, pen=p['Spectrum', 'Line color'])
 
-            self.specplot.autoRange()
-            if self.zoomplot is not None:
-                self.zoomplot.plot(spec.data.data, clear=True)
-                self.specplot.addItem(self.zoomreg, ignoreBounds=True)
-                self.update_spec_with_region()
+        if p['Median filter', 'Show']:
+            sp = spec.median_filter(p['Median filter', 'Kernel Size'])
+            self.specplot.plot(sp.data.data, pen={
+                'color': p['Median filter', 'Line Color'],
+                'width': p['Median filter', 'Line Size']
+            })
+
+        # self.specplot.autoRange()
+        if self.zoomplot is not None:
+            self.update_zoom_spec_from_region()
 
 
 def main():
