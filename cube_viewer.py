@@ -6,7 +6,8 @@ import numpy as np
 import os
 import pyqtgraph as pg
 import sys
-from mpdaf.obj import Cube, Spectrum, plt_zscale
+from mpdaf.obj import Cube, Spectrum
+from mpdaf.obj.plt_zscale import zscale
 from pyqtgraph.Qt import QtCore, QtGui
 from pyqtgraph.parametertree import Parameter, ParameterTree
 
@@ -78,12 +79,17 @@ class MuseApp(object):
 
         # self.img_label = win.addLabel('Hello !', justify='right')
 
-        # A plot area (ViewBox + axes) for displaying the image
+        # A plot area (ViewBox + axes) for displaying the  white-light image
         win.nextRow()
-        self.img_plot = win.addPlot(title='Image')
-        self.img_plot.setAspectLocked(lock=True, ratio=1)
+        self.white_plot = win.addPlot(title='White-light Image')
+        self.white_plot.setAspectLocked(lock=True, ratio=1)
+        self.white_item = pg.ImageItem()
+        self.white_plot.addItem(self.white_item)
 
-        # Item for displaying image data
+        # A plot area (ViewBox + axes) for displaying the image
+        win.nextColumn()
+        self.img_plot = win.addPlot(title='Band Image')
+        self.img_plot.setAspectLocked(lock=True, ratio=1)
         self.img_item = pg.ImageItem()
         self.img_plot.addItem(self.img_item)
 
@@ -99,7 +105,7 @@ class MuseApp(object):
 
         # self.specplot = win.addPlot(row=2, col=0, colspan=2)
         win.nextRow()
-        self.specplot = win.addPlot(title='Spectrum', colspan=2)
+        self.specplot = win.addPlot(title='Spectrum', colspan=3)
         self.zoomplot = None
         self.zoomplot_visible = False
 
@@ -122,7 +128,7 @@ class MuseApp(object):
 
         self.win_inner.nextRow()
         self.zoomplot = self.win_inner.addPlot(title='Zoomed Spectrum',
-                                               colspan=2)
+                                               colspan=3)
         self.zoomreg = region = pg.LinearRegionItem()
         region.setZValue(10)
         # self.specplot.addItem(self.zoomreg, ignoreBounds=True)
@@ -145,13 +151,21 @@ class MuseApp(object):
         self.zoomplot.setXRange(*self.zoomreg.getRegion(), padding=0)
 
     def load_cube(self, filename):
-        # Generate image data
         print('Loading cube {} ... '.format(filename), end='')
-        self.cube = Cube(filename)
+        self.cube = Cube(filename, dtype=None, copy=False)
         print('OK')
+
+        # Generate image data
+        print('Creating white-light image ... ', end='')
+        img = self.cube.mean(axis=0)
+        print('OK')
+        self.white_item.setImage(img.data.data.T)
+        self.white_item.setLevels(zscale(img.data.filled(0)))
+
         self.show_image()
 
-        # zoom to fit imageo
+        # zoom to fit image
+        self.white_plot.autoRange()
         self.img_plot.autoRange()
         self.update_spec_plot()
 
@@ -161,7 +175,7 @@ class MuseApp(object):
         print('OK')
         self.img_item.setImage(self.img.data.data.T)
         # self.hist.setLevels(self.img.data.min(), self.img.data.max())
-        self.hist.setLevels(*plt_zscale.zscale(self.img.data.filled(0)))
+        self.hist.setLevels(*zscale(self.img.data.filled(0)))
 
         self.lbdareg.setBrush(self.params['Spectrum', 'Selection color'])
         self.lbdareg.setRegion([self.params['Spectrum', 'Lambda Min'],
