@@ -110,10 +110,13 @@ class MuseApp(object):
         self.zoomplot = None
         self.zoomplot_visible = False
 
-        self.lbdareg = region = pg.LinearRegionItem(movable=False)
-        self.specplot.addItem(region)
-
+        # self.lbdareg = region = pg.LinearRegionItem(movable=False)
+        # self.specplot.addItem(region)
+        # region.setZValue(10)
+        self.zoomreg = region = pg.LinearRegionItem()
         region.setZValue(10)
+        self.specplot.addItem(self.zoomreg, ignoreBounds=True)
+        region.setRegion([1000, 1200])
 
         self.win.resize(1000, 800)
         self.win.show()
@@ -130,17 +133,14 @@ class MuseApp(object):
         self.win_inner.nextRow()
         self.zoomplot = self.win_inner.addPlot(title='Zoomed Spectrum',
                                                colspan=3)
-        self.zoomreg = region = pg.LinearRegionItem()
-        region.setZValue(10)
-        # self.specplot.addItem(self.zoomreg, ignoreBounds=True)
         self.zoomplot.setAutoVisible(y=True)
 
         def update_region_from_zoom():
-            region.setRegion(self.zoomplot.getViewBox().viewRange()[0])
+            self.zoomreg.setRegion(self.zoomplot.getViewBox().viewRange()[0])
 
-        region.sigRegionChanged.connect(self.update_zoom_spec_from_region)
+        self.zoomreg.sigRegionChanged.connect(
+            self.update_zoom_spec_from_region)
         self.zoomplot.sigRangeChanged.connect(update_region_from_zoom)
-        region.setRegion([1000, 1200])
 
     def update_zoom_spec_from_region(self):
         self.zoomplot.plot(self.spec.data.data, clear=True,
@@ -178,9 +178,9 @@ class MuseApp(object):
         # self.hist.setLevels(self.img.data.min(), self.img.data.max())
         self.hist.setLevels(*zscale(self.img.data.filled(0)))
 
-        self.lbdareg.setBrush(self.params['Spectrum', 'Selection color'])
-        self.lbdareg.setRegion([self.params['Spectrum', 'Lambda Min'],
-                                self.params['Spectrum', 'Lambda Max']])
+        # self.lbdareg.setBrush(self.params['Spectrum', 'Selection color'])
+        # self.lbdareg.setRegion([self.params['Spectrum', 'Lambda Min'],
+        #                         self.params['Spectrum', 'Lambda Max']])
 
     def add_roi(self, position=(150, 100), size=(20, 20)):
         # Custom ROI for selecting an image region
