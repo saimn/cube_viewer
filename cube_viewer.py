@@ -10,6 +10,7 @@ from mpdaf.obj import Cube, Spectrum
 from mpdaf.obj.plt_zscale import zscale
 from pyqtgraph.Qt import QtCore, QtGui
 from pyqtgraph.parametertree import Parameter, ParameterTree
+from six.moves import zip
 
 
 SKYREF = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'udf',
@@ -215,7 +216,7 @@ class MuseApp(object):
         size = np.array(self.roi.size(), dtype=int)
         imin = np.clip(pos - size, 0, self.cube.shape[1])
         imax = np.clip(pos + size, 0, self.cube.shape[2])
-        print('Extract mean spectrum for {}'.format(zip(imin, imax)))
+        print('Extract mean spectrum for {}'.format(list(zip(imin, imax))))
         data = self.cube[:, imin[0]:imax[0], imin[1]:imax[1]]
         self.spec = spec = data.mean(axis=(1, 2))
         self.specplot.clearPlots()
