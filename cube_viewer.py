@@ -7,7 +7,7 @@ import os
 import pyqtgraph as pg
 import sys
 from mpdaf.obj import Cube, Spectrum
-from mpdaf.obj.plt_zscale import zscale
+from mpdaf.tools import zscale
 from pyqtgraph.Qt import QtCore, QtGui
 from pyqtgraph.parametertree import Parameter, ParameterTree
 from six.moves import zip
