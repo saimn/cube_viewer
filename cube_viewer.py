@@ -222,7 +222,7 @@ class MuseApp(object):
         self.specplot.clearPlots()
 
         if p['Sky', 'Show']:
-            sp = self.sky.data.data * (2*spec.data.max()) + spec.data.min()
+            sp = self.sky.data.data * (2 * spec.data.max()) + spec.data.min()
             self.specplot.plot(sp, pen=p['Sky', 'Line Color'])
 
         self.specplot.plot(spec.data.data, pen=p['Spectrum', 'Line color'])
