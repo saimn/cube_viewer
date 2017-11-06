@@ -6,6 +6,7 @@ import numpy as np
 import os
 import pyqtgraph as pg
 import sys
+from astropy.io import fits
 from mpdaf.obj import Cube, Spectrum
 from mpdaf.tools import zscale
 from pyqtgraph.Qt import QtCore, QtGui
@@ -18,7 +19,7 @@ SKYREF = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'udf',
 
 PARAMS = [
     {'name': 'Sky', 'type': 'group', 'children': [
-        {'name': 'Show', 'type': 'bool', 'value': True},
+        {'name': 'Show', 'type': 'bool', 'value': False},
         {'name': 'Line Color', 'type': 'str', 'value': 'aaaa'},
     ]},
     {'name': 'Spectrum', 'type': 'group', 'children': [
@@ -156,12 +157,17 @@ class MuseApp(object):
         self.cube = Cube(filename, dtype=None, copy=False)
         print('OK')
 
-        # Generate image data
-        print('Creating white-light image ... ', end='')
-        img = self.cube.mean(axis=0)
-        print('OK')
-        self.white_item.setImage(img.data.data.T)
-        self.white_item.setLevels(zscale(img.data.filled(0)))
+        with fits.open(filename) as hdul:
+            if 'WHITE' in hdul:
+                print('Loading White image ... ')
+                img = hdul['WHITE'].data
+            else:
+                print('Creating white-light image ... ')
+                img = self.cube.mean(axis=0).data.data
+
+        self.white_item.setImage(img.T)
+        # self.white_item.setLevels(zscale(img.data.filled(0)))
+        self.white_item.setLevels(zscale(img))
 
         self.show_image()
 
