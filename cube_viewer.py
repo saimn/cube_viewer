@@ -14,8 +14,8 @@ from pyqtgraph.parametertree import Parameter, ParameterTree
 from six.moves import zip
 
 
-SKYREF = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'udf',
-                      'data', 'sky-ref-spectra.fits')
+SKYREF = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                      'sky-ref-spectra.fits')
 
 PARAMS = [
     {'name': 'Sky', 'type': 'group', 'children': [
@@ -43,8 +43,11 @@ class MuseApp(object):
         self.img = None
         self.cube = None
         self.spec = None
-        self.sky = Spectrum(SKYREF)
-        self.sky.data /= self.sky.data.max()
+        if os.path.exists(SKYREF):
+            self.sky = Spectrum(SKYREF)
+            self.sky.data /= self.sky.data.max()
+        else:
+            self.sky = None
 
         pg.mkQApp()
 
@@ -228,8 +231,12 @@ class MuseApp(object):
         self.specplot.clearPlots()
 
         if p['Sky', 'Show']:
-            sp = self.sky.data.data * (2 * spec.data.max()) + spec.data.min()
-            self.specplot.plot(sp, pen=p['Sky', 'Line Color'])
+            if self.sky is not None:
+                sp = (self.sky.data.data * (2 * spec.data.max()) +
+                      spec.data.min())
+                self.specplot.plot(sp, pen=p['Sky', 'Line Color'])
+            else:
+                print('Sky file missing')
 
         self.specplot.plot(spec.data.data, pen=p['Spectrum', 'Line color'])
 
