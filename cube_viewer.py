@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-
-from __future__ import absolute_import, print_function
-
 import numpy as np
 import os
 import pyqtgraph as pg
@@ -11,7 +7,6 @@ from mpdaf.obj import Cube, Spectrum
 from mpdaf.tools import zscale
 from pyqtgraph.Qt import QtCore, QtGui
 from pyqtgraph.parametertree import Parameter, ParameterTree
-from six.moves import zip
 
 
 SKYREF = os.path.join(os.path.dirname(os.path.abspath(__file__)),
