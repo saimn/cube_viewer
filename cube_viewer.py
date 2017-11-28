@@ -1,3 +1,4 @@
+import astropy.units as u
 import numpy as np
 import os
 import pyqtgraph as pg
@@ -42,6 +43,7 @@ class MuseApp(object):
             self.sky = Spectrum(SKYREF)
             self.sky.data /= self.sky.data.max()
         else:
+            print('Sky file missing')
             self.sky = None
 
         pg.mkQApp()
@@ -101,8 +103,6 @@ class MuseApp(object):
         hist.setImageItem(self.img_item)
         win.addItem(hist)
 
-        self.add_roi()
-
         # self.specplot = win.addPlot(row=2, col=0, colspan=2)
         win.nextRow()
         self.specplot = win.addPlot(title='Spectrum', colspan=3)
@@ -115,7 +115,12 @@ class MuseApp(object):
         self.zoomreg = region = pg.LinearRegionItem()
         region.setZValue(10)
         self.specplot.addItem(self.zoomreg, ignoreBounds=True)
-        region.setRegion([1000, 1200])
+        region.sigRegionChanged.connect(self.update_zoom_spec_from_region)
+
+        p = self.params
+        lmin = p['Spectrum', 'Lambda Min']
+        lmax = p['Spectrum', 'Lambda Max']
+        region.setRegion([lmin, lmax])
 
         self.win.resize(1000, 800)
         self.win.show()
@@ -137,18 +142,22 @@ class MuseApp(object):
         def update_region_from_zoom():
             self.zoomreg.setRegion(self.zoomplot.getViewBox().viewRange()[0])
 
-        self.zoomreg.sigRegionChanged.connect(
-            self.update_zoom_spec_from_region)
         self.zoomplot.sigRangeChanged.connect(update_region_from_zoom)
 
     def update_zoom_spec_from_region(self):
-        self.zoomplot.plot(self.spec.data.data, clear=True,
-                           pen=self.params['Spectrum', 'Line color'])
-        # Add the LinearRegionItem to the ViewBox, but tell the ViewBox to
-        # exclude this item when doing auto-range calculations.
-        self.specplot.addItem(self.zoomreg, ignoreBounds=True)
-        self.zoomreg.setZValue(10)
-        self.zoomplot.setXRange(*self.zoomreg.getRegion(), padding=0)
+        lmin, lmax = self.zoomreg.getRegion()
+        print('update_zoom_spec_from_region', lmin, lmax)
+        p = self.params
+        p['Spectrum', 'Lambda Min'] = int(lmin)
+        p['Spectrum', 'Lambda Max'] = int(lmax)
+        if self.zoomplot:
+            self.zoomplot.plot(self.spec.data.data, clear=True,
+                               pen=self.params['Spectrum', 'Line color'])
+            # Add the LinearRegionItem to the ViewBox, but tell the ViewBox to
+            # exclude this item when doing auto-range calculations.
+            self.specplot.addItem(self.zoomreg, ignoreBounds=True)
+            self.zoomreg.setZValue(10)
+            self.zoomplot.setXRange(lmin, lmax, padding=0)
 
     def load_cube(self, filename):
         print('Loading cube {} ... '.format(filename), end='')
@@ -157,17 +166,20 @@ class MuseApp(object):
 
         with fits.open(filename) as hdul:
             if 'WHITE' in hdul:
-                print('Loading White image ... ')
+                print('Loading white image ... ', end='')
                 img = hdul['WHITE'].data
+                print('OK')
             else:
-                print('Creating white-light image ... ')
+                print('Creating white-light image ... ', end='')
                 img = self.cube.mean(axis=0).data.data
+                print('OK')
 
         self.white_item.setImage(img.T)
         # self.white_item.setLevels(zscale(img.data.filled(0)))
         self.white_item.setLevels(zscale(img))
 
         self.show_image()
+        self.add_roi(center=np.array(self.img.shape) / 2)
 
         # zoom to fit image
         self.white_plot.autoRange()
@@ -175,8 +187,11 @@ class MuseApp(object):
         self.update_spec_plot()
 
     def show_image(self):
-        print('Creating image ... ', end='')
-        self.img = self.cube[:100, :, :].mean(axis=0)
+        p = self.params
+        lmin = p['Spectrum', 'Lambda Min']
+        lmax = p['Spectrum', 'Lambda Max']
+        print(f'Creating image {lmin}-{lmax} ... ', end='')
+        self.img = self.cube[lmin:lmax, :, :].mean(axis=0)
         print('OK')
         self.img_item.setImage(self.img.data.data.T)
         # self.hist.setLevels(self.img.data.min(), self.img.data.max())
@@ -186,12 +201,14 @@ class MuseApp(object):
         # self.lbdareg.setRegion([self.params['Spectrum', 'Lambda Min'],
         #                         self.params['Spectrum', 'Lambda Max']])
 
-    def add_roi(self, position=(150, 100), size=(20, 20)):
+    def add_roi(self, center=(0, 0), size=(5, 5)):
         # Custom ROI for selecting an image region
+        size = np.asarray(size) / self.cube.wcs.get_step(unit=u.arcsec)
+        position = np.asarray(center) - size / 2
         self.roi = roi = pg.ROI(position, size, pen=dict(color='g', size=5))
         roi.addScaleHandle([0.5, 1], [0.5, 0.5])
         roi.addScaleHandle([0, 0.5], [0.5, 0.5])
-        roi.addRotateHandle([1, 0], [0.5, 0.5])
+        # roi.addRotateHandle([1, 0], [0.5, 0.5])
         self.img_plot.addItem(roi)
         roi.setZValue(10)  # make sure ROI is drawn above image
         roi.sigRegionChangeFinished.connect(self.update_spec_plot)
@@ -218,20 +235,16 @@ class MuseApp(object):
         p = self.params
         pos = np.array(self.roi.pos(), dtype=int)
         size = np.array(self.roi.size(), dtype=int)
-        imin = np.clip(pos - size, 0, self.cube.shape[1])
+        imin = np.clip(pos, 0, self.cube.shape[1])
         imax = np.clip(pos + size, 0, self.cube.shape[2])
         print('Extract mean spectrum for {}'.format(list(zip(imin, imax))))
-        data = self.cube[:, imin[0]:imax[0], imin[1]:imax[1]]
+        data = self.cube[:, imin[1]:imax[1], imin[0]:imax[0]]
         self.spec = spec = data.mean(axis=(1, 2))
         self.specplot.clearPlots()
 
-        if p['Sky', 'Show']:
-            if self.sky is not None:
-                sp = (self.sky.data.data * (2 * spec.data.max()) +
-                      spec.data.min())
-                self.specplot.plot(sp, pen=p['Sky', 'Line Color'])
-            else:
-                print('Sky file missing')
+        if p['Sky', 'Show'] and self.sky is not None:
+            sp = self.sky.data.data * (2 * spec.data.max()) + spec.data.min()
+            self.specplot.plot(sp, pen=p['Sky', 'Line Color'])
 
         self.specplot.plot(spec.data.data, pen=p['Spectrum', 'Line color'])
 
